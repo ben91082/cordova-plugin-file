@@ -250,6 +250,27 @@ FileReader.prototype.readAsDataURL = function(file) {
 };
 
 /**
+ * Read file and return a SHA-256 Hash of the data
+ *
+ * @param file          {File} File object containing file properties
+ */
+FileReader.prototype.readAsHash = function(file) {
+    if (initRead(this, file)) {
+        return this._realReader.readAsHash(file);
+    }
+
+    var totalSize = file.end - file.start;
+    readSuccessCallback.bind(this)("readAsHash", null, file.start, totalSize, function(r) {
+        var commaIndex = r.indexOf(',');
+        if (this._progress === 0) {
+            this._result = r;
+        } else {
+            this._result += r.substring(commaIndex + 1);
+        }
+    }.bind(this));
+};
+
+/**
  * Read file and return data as a binary data.
  *
  * @param file          {File} File object containing file properties

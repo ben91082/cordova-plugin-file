@@ -49,6 +49,7 @@ import java.security.Permission;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.security.MessageDigest;
 
 /**
  * This class provides file and directory services to JavaScript.
@@ -327,7 +328,17 @@ public class FileUtils extends CordovaPlugin {
                     readFileAs(fname, start, end, callbackContext, null, -1);
                 }
             }, rawArgs, callbackContext);
-        }
+        } 
+        else if (action.equals("readAsHash")) {
+            threadhelper( new FileOp( ){
+                public void run(JSONArray args) throws JSONException, MalformedURLException  {
+                    int start = args.getInt(1);
+                    int end = args.getInt(2);
+                    String fname=args.getString(0);
+                    readFileAs(fname, start, end, callbackContext, null, PluginResult.MESSAGE_TYPE_NUMBER);
+                }
+            }, rawArgs, callbackContext);
+        }        
         else if (action.equals("readAsArrayBuffer")) {
             threadhelper( new FileOp( ){
                 public void run(JSONArray args) throws JSONException, MalformedURLException  {
@@ -1048,6 +1059,7 @@ public class FileUtils extends CordovaPlugin {
             fs.readFileAtURL(inputURL, start, end, new Filesystem.ReadFileCallback() {
                 public void handleData(InputStream inputStream, String contentType) {
             		try {
+                        MessageDigest md = MessageDigest.getInstance("SHA-256");
                         ByteArrayOutputStream os = new ByteArrayOutputStream();
                         final int BUFFER_SIZE = 8192;
                         byte[] buffer = new byte[BUFFER_SIZE];
@@ -1058,6 +1070,8 @@ public class FileUtils extends CordovaPlugin {
                             if (bytesRead <= 0) {
                                 break;
                             }
+
+                            md.update(buffer, 0, bytesRead);
                             os.write(buffer, 0, bytesRead);
                         }
 
@@ -1072,16 +1086,28 @@ public class FileUtils extends CordovaPlugin {
             			case PluginResult.MESSAGE_TYPE_BINARYSTRING:
                             result = new PluginResult(PluginResult.Status.OK, os.toByteArray(), true);
             				break;
+                        case PluginResult.MESSAGE_TYPE_NUMBER:
+                            //convert the byte to hex format
+                            byte[] mdbytes = md.digest(); 
+                            StringBuffer sb = new StringBuffer();
+                            for (int i = 0; i < mdbytes.length; i++) {
+                                sb.append(Integer.toString((mdbytes[i] & 0xff) + 0x100, 16).substring(1));
+                            }                        
+                            result = new PluginResult(PluginResult.Status.OK, sb.toString());
+                            break;                            
             			default: // Base64.
-                        byte[] base64 = Base64.encode(os.toByteArray(), Base64.NO_WRAP);
-            			String s = "data:" + contentType + ";base64," + new String(base64, "US-ASCII");
-            			result = new PluginResult(PluginResult.Status.OK, s);
+                            byte[] base64 = Base64.encode(os.toByteArray(), Base64.NO_WRAP);
+                			String s = "my data:" + contentType + ";base64," + new String(base64, "US-ASCII");
+                			result = new PluginResult(PluginResult.Status.OK, s);
             			}
 
             			callbackContext.sendPluginResult(result);
             		} catch (IOException e) {
             			Log.d(LOG_TAG, e.getLocalizedMessage());
             			callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.IO_EXCEPTION, NOT_READABLE_ERR));
+                    } catch (Exception e) {
+                        Log.d(LOG_TAG, e.getLocalizedMessage());
+                        callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.IO_EXCEPTION, NOT_READABLE_ERR));
                     }
             	}
             });
