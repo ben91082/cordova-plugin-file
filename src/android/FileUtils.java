@@ -1097,7 +1097,7 @@ public class FileUtils extends CordovaPlugin {
                             break;                            
             			default: // Base64.
                             byte[] base64 = Base64.encode(os.toByteArray(), Base64.NO_WRAP);
-                			String s = "my data:" + contentType + ";base64," + new String(base64, "US-ASCII");
+                			String s = "data:" + contentType + ";base64," + new String(base64, "US-ASCII");
                 			result = new PluginResult(PluginResult.Status.OK, s);
             			}
 
