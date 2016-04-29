@@ -22,6 +22,7 @@
 #import "CDVLocalFilesystem.h"
 #import "CDVAssetLibraryFilesystem.h"
 #import <objc/message.h>
+#import <CommonCrypto/CommonDigest.h>
 
 static NSString* toBase64(NSData* data) {
     SEL s1 = NSSelectorFromString(@"cdv_base64EncodedString");
@@ -40,6 +41,20 @@ static NSString* toBase64(NSData* data) {
     } else {
         return nil;
     }
+}
+
+static NSString* toHash(NSData* data) {
+    NSMutableData *macOut = [NSMutableData CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(dataIn.bytes, dataIn.length,  macOut.mutableBytes);
+
+    NSUInteger capacity = macOut.length * 2;
+    NSMutableString *sbuf = [NSMutableString stringWithCapacity:capacity];
+    const unsigned char *buf = macOut.mutableBytes;
+    NSInteger i;
+    for (i=0; i<data.length; ++i) {
+        [sbuf appendFormat:@"%02X", (NSUInteger)buf[i]];
+    }
+    return sbuf;
 }
 
 CDVFile *filePlugin = nil;
@@ -904,6 +919,40 @@ NSString* const kCDVFilesystemURLPrefix = @"cdvfile";
             if (data != nil) {
                 NSString* b64Str = toBase64(data);
                 NSString* output = [NSString stringWithFormat:@"data:%@;base64,%@", mimeType, b64Str];
+                result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:output];
+            } else {
+                result = [CDVPluginResult resultWithStatus:CDVCommandStatus_IO_EXCEPTION messageAsInt:errorCode];
+            }
+
+            [weakSelf.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+        }];
+    }];
+}
+
+/* Read file data and return a hash
+ * IN:
+ * NSArray* arguments
+ *  0 - NSString* fullPath
+ *  1 - NSString* start
+ *  2 - NSString* end
+ *
+ * Determines the mime type from the file extension, returns ENCODING_ERR if mimetype can not be determined.
+ */
+
+- (void)readAsHash:(CDVInvokedUrlCommand*)command
+{
+    CDVFilesystemURL* localURI = [self fileSystemURLforArg:command.arguments[0]];
+    NSInteger start = [[command argumentAtIndex:1] integerValue];
+    NSInteger end = [[command argumentAtIndex:2] integerValue];
+
+    NSObject<CDVFileSystem> *fs = [self filesystemForURL:localURI];
+
+    __weak CDVFile* weakSelf = self;
+    [self.commandDelegate runInBackground:^ {
+        [fs readFileAtURL:localURI start:start end:end callback:^(NSData* data, NSString* mimeType, CDVFileError errorCode) {
+            CDVPluginResult* result = nil;
+            if (data != nil) {
+                NSString* output = toHash(data);
                 result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:output];
             } else {
                 result = [CDVPluginResult resultWithStatus:CDVCommandStatus_IO_EXCEPTION messageAsInt:errorCode];
